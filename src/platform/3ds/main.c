@@ -110,6 +110,7 @@ static bool interframeBlending = false;
 static bool sgbCrop = false;
 
 static bool core2;
+static bool gameRunning = false;
 
 static bool _initGpu(void) {
 	if (!C3D_Init(C3D_DEFAULT_CMDBUF_SIZE)) {
@@ -320,6 +321,8 @@ static void _setup(struct mGUIRunner* runner) {
 }
 
 static void _gameLoaded(struct mGUIRunner* runner) {
+	gameRunning = true;
+
 	switch (runner->core->platform(runner->core)) {
 #ifdef M_CORE_GBA
 		// TODO: Move these to callbacks
@@ -404,6 +407,8 @@ static void _gameLoaded(struct mGUIRunner* runner) {
 }
 
 static void _gameUnloaded(struct mGUIRunner* runner) {
+	gameRunning = false;
+
 	osSetSpeedupEnable(false);
 	frameLimiter = true;
 
@@ -672,8 +677,17 @@ static bool _running(struct mGUIRunner* runner) {
 
 static uint32_t _pollInput(const struct mInputMap* map) {
 	hidScanInput();
-	int activeKeys = hidKeysHeld();
-	return mInputMapKeyBits(map, _3DS_INPUT, activeKeys, 0);
+	uint32_t heldKeys = hidKeysHeld();
+	uint32_t downKeys = hidKeysDown();
+	uint32_t guiKeys = mInputMapKeyBits(map, _3DS_INPUT, heldKeys, 0);
+
+	// Tap on the lower screen to open the pause menu while gameplay is active.
+	// When already paused/in menu, keep touch dedicated to cursor selection.
+	if (gameRunning && (downKeys & KEY_TOUCH)) {
+		guiKeys |= 1 << GUI_INPUT_CANCEL;
+	}
+
+	return guiKeys;
 }
 
 static enum GUICursorState _pollCursor(unsigned* x, unsigned* y) {
